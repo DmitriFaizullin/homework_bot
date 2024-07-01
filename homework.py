@@ -1,14 +1,17 @@
-import os
-import requests
-from telebot import TeleBot
-from dotenv import load_dotenv
-import time
-import exceptions as ex
 import logging
+import os
 import sys
+import time
+from http import HTTPStatus
+
+import requests
+from dotenv import load_dotenv
+from telebot import TeleBot
+
+import exceptions as ex
+
 
 load_dotenv()
-
 
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -28,12 +31,14 @@ HOMEWORK_VERDICTS = {
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler(stream=sys.stdout)
 handler.setLevel(logging.DEBUG)
-handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+handler.setFormatter(
+    logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+)
 logger.addHandler(handler)
 
 
 def check_tokens():
-    """Docstring."""
+    """Проверка наличия токенов в окружении."""
     if not (PRACTICUM_TOKEN and TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
         logging.critical(
             'В глобальном окружении отсутствует переменная '
@@ -55,10 +60,12 @@ def send_message(bot, message):
 
 
 def get_api_answer(timestamp):
-    """Docstring."""
+    """Сделать запрос к api сайта."""
     try:
-        api_answer = requests.get(ENDPOINT, headers=HEADERS, params={'from_date': timestamp})
-        if api_answer.status_code != 200:
+        api_answer = requests.get(
+            ENDPOINT, headers=HEADERS, params={'from_date': timestamp}
+        )
+        if api_answer.status_code != HTTPStatus.OK:
             raise Exception(f'status code ответа {api_answer.status_code}')
         return api_answer.json()
     except Exception as error:
@@ -66,7 +73,7 @@ def get_api_answer(timestamp):
 
 
 def check_response(response):
-    """Docstring."""
+    """Проверить ответ сервера."""
     if not isinstance(response, dict):
         raise TypeError('формат ответа сервера должен быть классa dict')
     if 'homeworks' in response:
@@ -84,7 +91,7 @@ def check_response(response):
 
 
 def parse_status(homework):
-    """Docstring."""
+    """Возвращает статус домашней работы."""
     if 'status' in homework:
         status = homework.get('status')
         if status in HOMEWORK_VERDICTS:
@@ -92,7 +99,8 @@ def parse_status(homework):
             if 'homework_name' not in homework:
                 raise ex.NoKeyException('homework_name')
             homework_name = homework.get('homework_name')
-            return f'Изменился статус проверки работы "{homework_name}". {verdict}'
+            return (f'Изменился статус проверки '
+                    f'работы "{homework_name}". {verdict}')
         raise ex.UnexpectedStatusException(status)
     raise ex.NoKeyException('status')
 
@@ -101,7 +109,6 @@ def main():
     """Основная логика работы бота."""
     check_tokens()
 
-    # Создаем объект класса бота
     bot = TeleBot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time()) - RETRY_PERIOD
     previous_message = ''
