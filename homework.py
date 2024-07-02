@@ -6,7 +6,7 @@ from http import HTTPStatus
 
 import requests
 from dotenv import load_dotenv
-from telebot import TeleBot
+from telebot import TeleBot, apihelper
 
 import exceptions as ex
 
@@ -39,12 +39,18 @@ logger.addHandler(handler)
 
 def check_tokens():
     """Проверка наличия токенов в окружении."""
-    if not (PRACTICUM_TOKEN and TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
+    tokens = {
+        'PRACTICUM_TOKEN': PRACTICUM_TOKEN,
+        'TELEGRAM_TOKEN': TELEGRAM_TOKEN,
+        'TELEGRAM_CHAT_ID': TELEGRAM_CHAT_ID,
+    }
+    missing_tokens = [name for name, value in tokens.items() if not value]
+    for token in missing_tokens:
         logging.critical(
-            'В глобальном окружении отсутствует переменная '
-            'PRACTICUM_TOKEN, TELEGRAM_TOKEN или TELEGRAM_CHAT_ID!'
-        )
-        sys.exit()
+            f'В глобальном окружении отсутствует переменная {token}')
+    if missing_tokens:
+        return False
+    return True
 
 
 def send_message(bot, message):
@@ -54,60 +60,70 @@ def send_message(bot, message):
             chat_id=TELEGRAM_CHAT_ID,
             text=message
         )
-        logging.debug('Удачная отправка сообщения в Telegram')
-    except Exception:
+    except (apihelper.ApiException, requests.RequestException):
         raise ex.SendingMessageException
+    logging.debug('Удачная отправка сообщения в Telegram')
 
 
 def get_api_answer(timestamp):
     """Сделать запрос к api сайта."""
+    request_params = {
+        'url': ENDPOINT,
+        'headers': HEADERS,
+        'params': {'from_date': timestamp}
+    }
     try:
-        api_answer = requests.get(
-            ENDPOINT, headers=HEADERS, params={'from_date': timestamp}
-        )
+        api_answer = requests.get(**request_params)
         if api_answer.status_code != HTTPStatus.OK:
-            raise Exception(f'status code ответа {api_answer.status_code}')
+            raise requests.RequestException()
         return api_answer.json()
-    except Exception as error:
-        raise ex.EndpointException(error)
+    except requests.RequestException:
+        raise ex.EndpointException(
+            request_params["url"],
+            api_answer.status_code
+        )
 
 
 def check_response(response):
     """Проверить ответ сервера."""
     if not isinstance(response, dict):
-        raise TypeError('формат ответа сервера должен быть классa dict')
+        raise TypeError(f'класс ответа сервера {type(response)} вместо dict')
     if 'homeworks' in response:
         if not isinstance(response['homeworks'], list):
-            raise TypeError('класс homeworks должен быть list')
+            raise TypeError(
+                f'класс homeworks {type(response["homeworks"])} вместо list')
         if not response['homeworks']:
-            raise ex.StatusNotChangedException
+            logging.debug('Cтатус работы не изменился!')
+            return False
     elif 'code' in response:
         if response['code'] == 'UnknownError':
             raise ex.FormDateException
-        elif response['code'] == 'not_authenticated':
+        if response['code'] == 'not_authenticated':
             raise ex.NotAuthenticatedException
     else:
-        raise ex.NoKeyException('homeworks или code')
+        raise KeyError('homeworks или code')
+    return True
 
 
 def parse_status(homework):
     """Возвращает статус домашней работы."""
-    if 'status' in homework:
-        status = homework.get('status')
-        if status in HOMEWORK_VERDICTS:
-            verdict = HOMEWORK_VERDICTS.get(status)
-            if 'homework_name' not in homework:
-                raise ex.NoKeyException('homework_name')
-            homework_name = homework.get('homework_name')
-            return (f'Изменился статус проверки '
-                    f'работы "{homework_name}". {verdict}')
-        raise ex.UnexpectedStatusException(status)
-    raise ex.NoKeyException('status')
+    if 'status' not in homework:
+        raise KeyError('status')
+    status = homework['status']
+    if status not in HOMEWORK_VERDICTS:
+        raise KeyError(f'отсутствует ключ {status}')
+    if 'homework_name' not in homework:
+        raise KeyError('отсутствует ключ homework_name')
+    return (
+        f'Изменился статус проверки работы '
+        f'"{homework["homework_name"]}". {HOMEWORK_VERDICTS[status]}'
+    )
 
 
 def main():
     """Основная логика работы бота."""
-    check_tokens()
+    if not check_tokens():
+        sys.exit()
 
     bot = TeleBot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time()) - RETRY_PERIOD
@@ -116,20 +132,17 @@ def main():
     while True:
         try:
             response = get_api_answer(timestamp)
-            check_response(response)
-            message = parse_status(response.get('homeworks')[0])
-            send_message(bot, message)
+            if check_response(response):
+                message = parse_status(response.get('homeworks')[0])
+                send_message(bot, message)
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            if type(error) is ex.StatusNotChangedException:
-                logging.debug(message)
-            else:
-                if type(error) is not ex.SendingMessageException:
-                    if previous_message != message:
-                        send_message(bot, message)
-                        previous_message = message
-                logging.error(message)
+            if not isinstance(error, ex.SendingMessageException):
+                if previous_message != message:
+                    send_message(bot, message)
+                    previous_message = message
+            logging.error(message)
 
         time.sleep(RETRY_PERIOD)
 

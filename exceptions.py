@@ -1,11 +1,3 @@
-class StatusNotChangedException(Exception):
-    """Статус без изменений."""
-
-    def __str__(self):
-        """Описание ошибки."""
-        return 'статус работы не изменился!'
-
-
 class FormDateException(Exception):
     """Неправильный формат from_date."""
 
@@ -33,37 +25,7 @@ class SendingMessageException(Exception):
 class EndpointException(Exception):
     """Недоступен эндпоинт."""
 
-    def __init__(self, error):
-        """Инициализатор класса."""
-        super().__init__()
-        self.error = error
-
     def __str__(self):
         """Описание ошибки."""
-        return f'эндпоинт недоступен ({self.error})!'
-
-
-class UnexpectedStatusException(Exception):
-    """Неожиданный статус домашней работы."""
-
-    def __init__(self, status):
-        """Инициализатор класса."""
-        super().__init__()
-        self.status = status
-
-    def __str__(self):
-        """Описание ошибки."""
-        return f'неожиданный статус домажней работы ({self.status})!'
-
-
-class NoKeyException(Exception):
-    """Отсутсвует необходимый ключ в ответе сервера."""
-
-    def __init__(self, key_name):
-        """Инициализатор класса."""
-        super().__init__()
-        self.key_name = key_name
-
-    def __str__(self):
-        """Описание ошибки."""
-        return f'отсутствует ключ {self.key_name}!'
+        return (f'Эндпоинт {self.args[0]} недоступен. '
+                f'Код ответа API: {self.args[1]}')
