@@ -48,9 +48,7 @@ def check_tokens():
     for token in missing_tokens:
         logging.critical(
             f'В глобальном окружении отсутствует переменная {token}')
-    if missing_tokens:
-        return False
-    return True
+    return missing_tokens
 
 
 def send_message(bot, message):
@@ -75,13 +73,10 @@ def get_api_answer(timestamp):
     try:
         api_answer = requests.get(**request_params)
         if api_answer.status_code != HTTPStatus.OK:
-            raise requests.RequestException()
-        return api_answer.json()
+            raise ex.StatusCodeException(api_answer.status_code)
     except requests.RequestException:
-        raise ex.EndpointException(
-            request_params["url"],
-            api_answer.status_code
-        )
+        raise ex.EndpointException(request_params["url"])
+    return api_answer.json()
 
 
 def check_response(response):
@@ -122,7 +117,7 @@ def parse_status(homework):
 
 def main():
     """Основная логика работы бота."""
-    if not check_tokens():
+    if check_tokens():
         sys.exit()
 
     bot = TeleBot(token=TELEGRAM_TOKEN)
@@ -138,11 +133,12 @@ def main():
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            if not isinstance(error, ex.SendingMessageException):
-                if previous_message != message:
-                    send_message(bot, message)
-                    previous_message = message
             logging.error(message)
+            if isinstance(error, ex.SendingMessageException):
+                break
+            if previous_message != message:
+                send_message(bot, message)
+                previous_message = message
 
         time.sleep(RETRY_PERIOD)
 

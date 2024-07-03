@@ -27,5 +27,12 @@ class EndpointException(Exception):
 
     def __str__(self):
         """Описание ошибки."""
-        return (f'Эндпоинт {self.args[0]} недоступен. '
-                f'Код ответа API: {self.args[1]}')
+        return (f'Эндпоинт {self.args[0]} недоступен.')
+
+
+class StatusCodeException(Exception):
+    """Неверный сатус-код API сервера."""
+
+    def __str__(self):
+        """Описание ошибки."""
+        return (f'Код ответа API: {self.args[0]}')
