@@ -135,8 +135,8 @@ def main():
             message = f'Сбой в работе программы: {error}'
             logging.error(message)
             if isinstance(error, ex.SendingMessageException):
-                break
-            if previous_message != message:
+                pass
+            elif previous_message != message:
                 send_message(bot, message)
                 previous_message = message
 
